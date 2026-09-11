@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #0f0804;
+  --color-surface: #18090450;
+  --color-card: #1c0d07;
+  --color-card-hover: #251408;
+  --color-border: #3d2210;
+  --color-border-light: #4f2e18;
+  --color-cream: #f0e6d3;
+  --color-cream-dim: #c8b49a;
+  --color-cream-muted: #7a6050;
+  --color-gold: #c4882a;
+  --color-gold-light: #e8b84a;
+  --color-gold-dark: #9a6820;
+  --color-danger: #c44a4a;
+  --color-success: #4a9a5a;
+  --color-warning: #c4952a;
+  --color-info: #4a80c4;
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background-color: #0f0804;
+  color: #f0e6d3;
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3d2210 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #3d2210;
+  border-radius: 3px;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  opacity: 0.3;
+}

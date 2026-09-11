@@ -1,0 +1,10 @@
+{
+  "description": "Manage chocolate confectionery orders, inventory, recipes, and sales with a comprehensive system to track costs, customer info, and business performance.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
