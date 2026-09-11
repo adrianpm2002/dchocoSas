@@ -84,7 +84,7 @@ export default function Recetas() {
     }, 0)
   }
 
-  function submitReceta() {
+  async function submitReceta() {
     if (!form.nombre.trim()) return
     const data = {
       nombre: form.nombre.trim(),
@@ -93,8 +93,8 @@ export default function Recetas() {
       activa: form.activa,
       ingredientes: form.ingredientes,
     }
-    if (editId) updateReceta(editId, data)
-    else addReceta(data)
+    if (editId) await updateReceta(editId, data)
+    else await addReceta(data)
     setModal(null)
   }
 
@@ -401,7 +401,7 @@ export default function Recetas() {
         </p>
         <div className="flex gap-3">
           <button onClick={() => setModal(null)} className="flex-1 rounded-lg py-2.5 text-sm border border-border" style={{ color: '#7a6050' }}>Cancelar</button>
-          <button onClick={() => { if (detailId) deleteReceta(detailId); setModal(null) }}
+          <button onClick={async () => { if (detailId) await deleteReceta(detailId); setModal(null) }}
             className="flex-1 rounded-lg py-2.5 text-sm font-medium" style={{ background: '#c44a4a', color: '#f0e6d3' }}>
             Eliminar
           </button>

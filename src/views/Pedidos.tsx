@@ -103,9 +103,9 @@ export default function Pedidos() {
   const descuento = parseFloat(form.descuento) || 0
   const total = subtotal + decoTotal - descuento
 
-  function submitPedido() {
+  async function submitPedido() {
     if (!form.clienteNombre.trim() || items.length === 0) return
-    addPedido({
+    await addPedido({
       cliente: { nombre: form.clienteNombre.trim(), telefono: form.clienteTelefono.trim(), direccion: form.clienteDireccion.trim() },
       items,
       decoraciones: decos,

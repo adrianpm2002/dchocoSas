@@ -74,7 +74,7 @@ export default function Insumos() {
     setModal('compra')
   }
 
-  function submitInsumo() {
+  async function submitInsumo() {
     const data = {
       nombre: form.nombre.trim(),
       cantidad: parseFloat(form.cantidad) || 0,
@@ -85,17 +85,17 @@ export default function Insumos() {
       costoTotal: modal === 'add' ? (parseFloat(form.cantidad) || 0) * (parseFloat(form.costoPorUnidad) || 0) : (insumos.find(i => i.id === editId)?.costoTotal ?? 0),
     }
     if (!data.nombre) return
-    if (modal === 'add') addInsumo(data)
-    else if (modal === 'edit' && editId) updateInsumo(editId, data)
+    if (modal === 'add') await addInsumo(data)
+    else if (modal === 'edit' && editId) await updateInsumo(editId, data)
     setModal(null)
   }
 
-  function submitCompra() {
+  async function submitCompra() {
     if (!editId) return
     const cant = parseFloat(compraForm.cantidad) || 0
     const costo = parseFloat(compraForm.costo) || 0
     if (cant <= 0) return
-    registrarCompra(editId, cant, costo)
+    await registrarCompra(editId, cant, costo)
     setModal(null)
   }
 
@@ -334,7 +334,7 @@ export default function Insumos() {
         </p>
         <div className="flex gap-3">
           <button onClick={() => setConfirmDelete(null)} className="flex-1 rounded-lg py-2.5 text-sm border border-border" style={{ color: '#7a6050' }}>Cancelar</button>
-          <button onClick={() => { deleteInsumo(confirmDelete!); setConfirmDelete(null) }} className="flex-1 rounded-lg py-2.5 text-sm font-medium" style={{ background: '#c44a4a', color: '#f0e6d3' }}>
+          <button onClick={async () => { await deleteInsumo(confirmDelete!); setConfirmDelete(null) }} className="flex-1 rounded-lg py-2.5 text-sm font-medium" style={{ background: '#c44a4a', color: '#f0e6d3' }}>
             Eliminar
           </button>
         </div>

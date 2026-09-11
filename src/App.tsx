@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { AuthProvider, useAuth } from './auth'
 import { StoreProvider } from './store'
 import Dashboard from './views/Dashboard'
 import Insumos from './views/Insumos'
 import Recetas from './views/Recetas'
 import Pedidos from './views/Pedidos'
 import Historial from './views/Historial'
+import Login from './views/Login'
 
 export type View = 'dashboard' | 'insumos' | 'recetas' | 'pedidos' | 'historial'
 
@@ -103,7 +105,7 @@ function Shell() {
         {/* Collapse toggle */}
         <button
           onClick={() => setOpen(!open)}
-          className="m-2 flex items-center justify-center rounded-md border border-border transition-colors duration-150"
+          className="mx-2 mb-1 flex items-center justify-center rounded-md border border-border transition-colors duration-150"
           style={{ height: 34, color: '#7a6050', background: 'transparent' }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f0e6d3' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#7a6050' }}
@@ -112,6 +114,8 @@ function Shell() {
             <path strokeLinecap="round" strokeLinejoin="round" d={open ? 'M11 19l-7-7 7-7m8 14l-7-7 7-7' : 'M13 5l7 7-7 7M5 5l7 7-7 7'} />
           </svg>
         </button>
+
+        <LogoutButton open={open} />
       </aside>
 
       {/* Main */}
@@ -128,8 +132,51 @@ function Shell() {
 
 export default function App() {
   return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
+  )
+}
+
+function Gate() {
+  const { ready, setupRequired, user } = useAuth()
+
+  if (!ready) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: '#0f0804' }}>
+        <p style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#c4882a' }}>Cargando...</p>
+      </div>
+    )
+  }
+
+  if (setupRequired || !user) return <Login />
+
+  return (
     <StoreProvider>
       <Shell />
     </StoreProvider>
+  )
+}
+
+function LogoutButton({ open }: { open: boolean }) {
+  const { user, logout } = useAuth()
+  return (
+    <button
+      onClick={() => { void logout() }}
+      title="Salir"
+      className="m-2 mt-0 flex items-center gap-3 rounded-md transition-colors duration-150 w-[calc(100%-16px)] text-left"
+      style={{
+        padding: open ? '8px 10px' : '8px 11px',
+        color: '#7a6050',
+        fontSize: 13,
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#c44a4a' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#7a6050' }}
+    >
+      <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+      </svg>
+      {open && <span className="truncate">Salir{user ? ` · ${user}` : ''}</span>}
+    </button>
   )
 }

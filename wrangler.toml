@@ -1,0 +1,16 @@
+name = "dchoco-sas"
+main = "src/worker.ts"
+compatibility_date = "2026-09-11"
+
+# SPA: React en dist/, API Hono en /api/*
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Reemplazar database_id después de: npx wrangler d1 create dchoco
+[[d1_databases]]
+binding = "DB"
+database_name = "dchoco"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

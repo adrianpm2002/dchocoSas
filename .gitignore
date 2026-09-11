@@ -19,3 +19,8 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+.wrangler/
+.dev.vars*
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm

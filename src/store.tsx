@@ -1,188 +1,130 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { api } from './api'
 import type { Insumo, Receta, Pedido } from './types'
 
-const initialInsumos: Insumo[] = [
-  { id: 'i1', nombre: 'Chocolate Oscuro 70%', cantidad: 2500, unidad: 'g', costoPorUnidad: 0.018, vecesComprado: 8, costoTotal: 144.0, stockMinimo: 500 },
-  { id: 'i2', nombre: 'Crema de Leche', cantidad: 3000, unidad: 'ml', costoPorUnidad: 0.0045, vecesComprado: 12, costoTotal: 54.0, stockMinimo: 500 },
-  { id: 'i3', nombre: 'Azúcar Glass', cantidad: 2000, unidad: 'g', costoPorUnidad: 0.0025, vecesComprado: 6, costoTotal: 15.0, stockMinimo: 200 },
-  { id: 'i4', nombre: 'Manteca de Cacao', cantidad: 500, unidad: 'g', costoPorUnidad: 0.08, vecesComprado: 4, costoTotal: 32.0, stockMinimo: 100 },
-  { id: 'i5', nombre: 'Almendras', cantidad: 400, unidad: 'g', costoPorUnidad: 0.055, vecesComprado: 5, costoTotal: 22.0, stockMinimo: 100 },
-  { id: 'i6', nombre: 'Frambuesas Liofilizadas', cantidad: 80, unidad: 'g', costoPorUnidad: 0.15, vecesComprado: 3, costoTotal: 12.0, stockMinimo: 30 },
-  { id: 'i7', nombre: 'Pistacho Molido', cantidad: 150, unidad: 'g', costoPorUnidad: 0.10, vecesComprado: 4, costoTotal: 16.0, stockMinimo: 50 },
-  { id: 'i8', nombre: 'Caja de Regalo', cantidad: 15, unidad: 'unidad', costoPorUnidad: 2.50, vecesComprado: 10, costoTotal: 37.5, stockMinimo: 5 },
-  { id: 'i9', nombre: 'Papel Celofán', cantidad: 2, unidad: 'rollo', costoPorUnidad: 3.50, vecesComprado: 6, costoTotal: 7.0, stockMinimo: 1 },
-  { id: 'i10', nombre: 'Licor de Amaretto', cantidad: 100, unidad: 'ml', costoPorUnidad: 0.05, vecesComprado: 2, costoTotal: 5.0, stockMinimo: 20 },
-]
-
-const initialRecetas: Receta[] = [
-  {
-    id: 'r1', nombre: 'Bombón de Ganache Oscuro', descripcion: 'Clásico bombón de chocolate negro con ganache sedoso',
-    ingredientes: [{ insumoId: 'i1', cantidad: 30 }, { insumoId: 'i2', cantidad: 15 }],
-    precioVenta: 2.50, vecesVendido: 145, activa: true,
-  },
-  {
-    id: 'r2', nombre: 'Trufa de Frambuesa', descripcion: 'Trufa de chocolate con corazón de frambuesa liofilizada',
-    ingredientes: [{ insumoId: 'i1', cantidad: 25 }, { insumoId: 'i2', cantidad: 12 }, { insumoId: 'i6', cantidad: 5 }],
-    precioVenta: 3.50, vecesVendido: 98, activa: true,
-  },
-  {
-    id: 'r3', nombre: 'Bombón de Almendra', descripcion: 'Bombón con almendra tostada y caramelo artesanal',
-    ingredientes: [{ insumoId: 'i1', cantidad: 25 }, { insumoId: 'i5', cantidad: 8 }, { insumoId: 'i2', cantidad: 8 }],
-    precioVenta: 3.00, vecesVendido: 112, activa: true,
-  },
-  {
-    id: 'r4', nombre: 'Bombón de Pistacho', descripcion: 'Bombón de chocolate negro relleno de crema de pistacho',
-    ingredientes: [{ insumoId: 'i1', cantidad: 25 }, { insumoId: 'i7', cantidad: 6 }, { insumoId: 'i2', cantidad: 8 }],
-    precioVenta: 3.50, vecesVendido: 76, activa: true,
-  },
-  {
-    id: 'r5', nombre: 'Caja Surtida (12 bombones)', descripcion: 'Selección de 12 bombones artesanales en caja de regalo',
-    ingredientes: [
-      { insumoId: 'i8', cantidad: 1 }, { insumoId: 'i1', cantidad: 120 },
-      { insumoId: 'i2', cantidad: 60 }, { insumoId: 'i5', cantidad: 24 },
-      { insumoId: 'i6', cantidad: 15 }, { insumoId: 'i7', cantidad: 18 },
-    ],
-    precioVenta: 32.00, vecesVendido: 45, activa: true,
-  },
-]
-
-const initialPedidos: Pedido[] = [
-  {
-    id: 'p1', estado: 'pendiente', fechaCreacion: '2026-09-09', fechaEntrega: '2026-09-12', notas: 'Entregar antes del mediodía',
-    cliente: { nombre: 'Ana García', telefono: '+54 9 11 5234-7890', direccion: 'Av. Corrientes 1234, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 2, precioUnitario: 32.00 }, { recetaId: 'r2', cantidad: 6, precioUnitario: 3.50 }],
-    decoraciones: [{ nombre: 'Lazo de terciopelo', precio: 5.00 }],
-    descuento: 0, precioFinal: 90.00,
-  },
-  {
-    id: 'p2', estado: 'en_proceso', fechaCreacion: '2026-09-08', fechaEntrega: '2026-09-11', notas: '',
-    cliente: { nombre: 'Carlos Mendoza', telefono: '+54 9 11 6345-8901', direccion: 'Calle Florida 567, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 3, precioUnitario: 32.00 }],
-    decoraciones: [{ nombre: 'Mensaje grabado en caja', precio: 8.00 }],
-    descuento: 0, precioFinal: 104.00,
-  },
-  {
-    id: 'p3', estado: 'listo', fechaCreacion: '2026-09-07', fechaEntrega: '2026-09-10', notas: 'Regalo de aniversario',
-    cliente: { nombre: 'María López', telefono: '+54 9 11 7456-9012', direccion: 'Tucumán 890, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 1, precioUnitario: 32.00 }, { recetaId: 'r1', cantidad: 6, precioUnitario: 2.50 }],
-    decoraciones: [],
-    descuento: 0, precioFinal: 47.00,
-  },
-  {
-    id: 'p4', estado: 'entregado', fechaCreacion: '2026-09-04', fechaEntrega: '2026-09-05', notas: '',
-    cliente: { nombre: 'Laura Torres', telefono: '+54 9 11 8567-0123', direccion: 'Palermo Soho 234, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 2, precioUnitario: 32.00 }],
-    decoraciones: [],
-    descuento: 0, precioFinal: 64.00,
-  },
-  {
-    id: 'p5', estado: 'entregado', fechaCreacion: '2026-09-02', fechaEntrega: '2026-09-03', notas: 'Cliente VIP, descuento aplicado',
-    cliente: { nombre: 'Roberto Silva', telefono: '+54 9 11 9678-1234', direccion: 'Recoleta 456, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 5, precioUnitario: 32.00 }],
-    decoraciones: [{ nombre: 'Envío expreso', precio: 12.00 }],
-    descuento: 10.00, precioFinal: 162.00,
-  },
-  {
-    id: 'p6', estado: 'entregado', fechaCreacion: '2026-09-01', fechaEntrega: '2026-09-01', notas: '',
-    cliente: { nombre: 'Carmen Rojas', telefono: '+54 9 11 0789-2345', direccion: 'Belgrano 789, CABA' },
-    items: [{ recetaId: 'r3', cantidad: 12, precioUnitario: 3.00 }, { recetaId: 'r1', cantidad: 6, precioUnitario: 2.50 }],
-    decoraciones: [],
-    descuento: 0, precioFinal: 51.00,
-  },
-  {
-    id: 'p7', estado: 'entregado', fechaCreacion: '2026-08-28', fechaEntrega: '2026-08-29', notas: '',
-    cliente: { nombre: 'Jorge Pérez', telefono: '+54 9 11 1890-3456', direccion: 'San Telmo 321, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 4, precioUnitario: 32.00 }, { recetaId: 'r4', cantidad: 6, precioUnitario: 3.50 }],
-    decoraciones: [{ nombre: 'Tarjeta personalizada', precio: 3.00 }],
-    descuento: 5.00, precioFinal: 147.00,
-  },
-  {
-    id: 'p8', estado: 'entregado', fechaCreacion: '2026-08-25', fechaEntrega: '2026-08-26', notas: '',
-    cliente: { nombre: 'Valentina Cruz', telefono: '+54 9 11 2901-4567', direccion: 'Almagro 654, CABA' },
-    items: [{ recetaId: 'r5', cantidad: 2, precioUnitario: 32.00 }, { recetaId: 'r2', cantidad: 4, precioUnitario: 3.50 }],
-    decoraciones: [],
-    descuento: 0, precioFinal: 78.00,
-  },
-]
-
-function load<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key)
-    return v ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
-}
-
 interface StoreCtx {
+  ready: boolean
+  error: string | null
+  refresh: () => Promise<void>
   insumos: Insumo[]
   recetas: Receta[]
   pedidos: Pedido[]
-  addInsumo: (data: Omit<Insumo, 'id'>) => void
-  updateInsumo: (id: string, data: Partial<Insumo>) => void
-  deleteInsumo: (id: string) => void
-  registrarCompra: (id: string, cantidad: number, costoPorUnidad: number) => void
-  addReceta: (data: Omit<Receta, 'id' | 'vecesVendido'>) => void
-  updateReceta: (id: string, data: Partial<Receta>) => void
-  deleteReceta: (id: string) => void
-  addPedido: (data: Omit<Pedido, 'id'>) => void
-  updatePedido: (id: string, data: Partial<Pedido>) => void
-  updateEstadoPedido: (id: string, estado: Pedido['estado']) => void
-  deletePedido: (id: string) => void
+  addInsumo: (data: Omit<Insumo, 'id'>) => Promise<void>
+  updateInsumo: (id: string, data: Partial<Insumo>) => Promise<void>
+  deleteInsumo: (id: string) => Promise<void>
+  registrarCompra: (id: string, cantidad: number, costoPorUnidad: number) => Promise<void>
+  addReceta: (data: Omit<Receta, 'id' | 'vecesVendido'>) => Promise<void>
+  updateReceta: (id: string, data: Partial<Receta>) => Promise<void>
+  deleteReceta: (id: string) => Promise<void>
+  addPedido: (data: Omit<Pedido, 'id'>) => Promise<void>
+  updatePedido: (id: string, data: Partial<Pedido>) => Promise<void>
+  updateEstadoPedido: (id: string, estado: Pedido['estado']) => Promise<void>
+  deletePedido: (id: string) => Promise<void>
   calcularCostoReceta: (recetaId: string) => number
 }
 
 const Store = createContext<StoreCtx>(null!)
 
+function clearLegacyStorage() {
+  try {
+    localStorage.removeItem('dc_insumos')
+    localStorage.removeItem('dc_recetas')
+    localStorage.removeItem('dc_pedidos')
+  } catch {
+    // ignore
+  }
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [insumos, setInsumos] = useState<Insumo[]>(() => load('dc_insumos', initialInsumos))
-  const [recetas, setRecetas] = useState<Receta[]>(() => load('dc_recetas', initialRecetas))
-  const [pedidos, setPedidos] = useState<Pedido[]>(() => load('dc_pedidos', initialPedidos))
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [insumos, setInsumos] = useState<Insumo[]>([])
+  const [recetas, setRecetas] = useState<Receta[]>([])
+  const [pedidos, setPedidos] = useState<Pedido[]>([])
 
-  useEffect(() => { localStorage.setItem('dc_insumos', JSON.stringify(insumos)) }, [insumos])
-  useEffect(() => { localStorage.setItem('dc_recetas', JSON.stringify(recetas)) }, [recetas])
-  useEffect(() => { localStorage.setItem('dc_pedidos', JSON.stringify(pedidos)) }, [pedidos])
+  const refresh = useCallback(async () => {
+    const data = await api.bootstrap()
+    setInsumos(data.insumos)
+    setRecetas(data.recetas)
+    setPedidos(data.pedidos)
+    setError(null)
+  }, [])
 
-  const uid = () => Math.random().toString(36).slice(2, 10)
+  useEffect(() => {
+    clearLegacyStorage()
+    refresh()
+      .catch(err => setError(err instanceof Error ? err.message : 'No se pudo cargar la base de datos'))
+      .finally(() => setReady(true))
+  }, [refresh])
 
-  const addInsumo = (data: Omit<Insumo, 'id'>) =>
-    setInsumos(p => [...p, { id: uid(), ...data }])
+  const addInsumo = async (data: Omit<Insumo, 'id'>) => {
+    const created = await api.createInsumo(data)
+    setInsumos(p => [...p, created])
+  }
 
-  const updateInsumo = (id: string, data: Partial<Insumo>) =>
-    setInsumos(p => p.map(i => i.id === id ? { ...i, ...data } : i))
+  const updateInsumo = async (id: string, data: Partial<Insumo>) => {
+    const updated = await api.updateInsumo(id, data)
+    setInsumos(p => p.map(i => i.id === id ? updated : i))
+  }
 
-  const deleteInsumo = (id: string) =>
+  const deleteInsumo = async (id: string) => {
+    await api.deleteInsumo(id)
     setInsumos(p => p.filter(i => i.id !== id))
+  }
 
-  const registrarCompra = (id: string, cantidad: number, costo: number) =>
-    setInsumos(p => p.map(i => i.id === id ? {
-      ...i,
-      cantidad: i.cantidad + cantidad,
-      vecesComprado: i.vecesComprado + 1,
-      costoPorUnidad: costo,
-      costoTotal: i.costoTotal + cantidad * costo,
-    } : i))
+  const registrarCompra = async (id: string, cantidad: number, costo: number) => {
+    const updated = await api.registrarCompra(id, cantidad, costo)
+    setInsumos(p => p.map(i => i.id === id ? updated : i))
+  }
 
-  const addReceta = (data: Omit<Receta, 'id' | 'vecesVendido'>) =>
-    setRecetas(p => [...p, { id: uid(), vecesVendido: 0, ...data }])
+  const addReceta = async (data: Omit<Receta, 'id' | 'vecesVendido'>) => {
+    const created = await api.createReceta(data)
+    setRecetas(p => [...p, created])
+  }
 
-  const updateReceta = (id: string, data: Partial<Receta>) =>
-    setRecetas(p => p.map(r => r.id === id ? { ...r, ...data } : r))
+  const updateReceta = async (id: string, data: Partial<Receta>) => {
+    const updated = await api.updateReceta(id, data)
+    setRecetas(p => p.map(r => r.id === id ? updated : r))
+  }
 
-  const deleteReceta = (id: string) =>
+  const deleteReceta = async (id: string) => {
+    await api.deleteReceta(id)
     setRecetas(p => p.filter(r => r.id !== id))
+  }
 
-  const addPedido = (data: Omit<Pedido, 'id'>) =>
-    setPedidos(p => [...p, { id: uid(), ...data }])
+  const addPedido = async (data: Omit<Pedido, 'id'>) => {
+    const created = await api.createPedido(data)
+    setPedidos(p => [created, ...p])
+    const sold = created.estado === 'entregado'
+    if (sold) {
+      setRecetas(p => p.map(r => {
+        const qty = created.items.filter(i => i.recetaId === r.id).reduce((s, i) => s + i.cantidad, 0)
+        return qty ? { ...r, vecesVendido: r.vecesVendido + qty } : r
+      }))
+    }
+  }
 
-  const updatePedido = (id: string, data: Partial<Pedido>) =>
-    setPedidos(p => p.map(o => o.id === id ? { ...o, ...data } : o))
+  const updatePedido = async (id: string, data: Partial<Pedido>) => {
+    const updated = await api.updatePedido(id, data)
+    setPedidos(p => p.map(o => o.id === id ? updated : o))
+  }
 
-  const updateEstadoPedido = (id: string, estado: Pedido['estado']) =>
-    setPedidos(p => p.map(o => o.id === id ? { ...o, estado } : o))
+  const updateEstadoPedido = async (id: string, estado: Pedido['estado']) => {
+    const previous = pedidos.find(o => o.id === id)
+    const updated = await api.updateEstadoPedido(id, estado)
+    setPedidos(p => p.map(o => o.id === id ? updated : o))
+    if (previous && previous.estado !== 'entregado' && updated.estado === 'entregado') {
+      setRecetas(p => p.map(r => {
+        const qty = updated.items.filter(i => i.recetaId === r.id).reduce((s, i) => s + i.cantidad, 0)
+        return qty ? { ...r, vecesVendido: r.vecesVendido + qty } : r
+      }))
+    }
+  }
 
-  const deletePedido = (id: string) =>
+  const deletePedido = async (id: string) => {
+    await api.deletePedido(id)
     setPedidos(p => p.filter(o => o.id !== id))
+  }
 
   const calcularCostoReceta = (recetaId: string): number => {
     const receta = recetas.find(r => r.id === recetaId)
@@ -193,8 +135,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, 0)
   }
 
+  if (!ready) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ background: '#0f0804' }}>
+        <p style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#c4882a' }}>Cargando...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4" style={{ background: '#0f0804' }}>
+        <p style={{ color: '#c44a4a', fontSize: 15 }}>{error}</p>
+        <button
+          onClick={() => { setReady(false); refresh().catch(err => setError(err instanceof Error ? err.message : 'Error')).finally(() => setReady(true)) }}
+          className="rounded-lg px-4 py-2 text-sm font-medium"
+          style={{ background: '#c4882a', color: '#0f0804' }}
+        >
+          Reintentar
+        </button>
+      </div>
+    )
+  }
+
   return (
     <Store.Provider value={{
+      ready, error, refresh,
       insumos, recetas, pedidos,
       addInsumo, updateInsumo, deleteInsumo, registrarCompra,
       addReceta, updateReceta, deleteReceta,
