@@ -288,6 +288,87 @@ function pedidoChildStatements(id: string, items: ItemPedido[], decoraciones: De
   ]
 }
 
+function consumeEstado(estado: EstadoPedido) {
+  return estado === 'listo' || estado === 'entregado'
+}
+
+const stockReady = new WeakMap<Db, Promise<void>>()
+
+export function ensureStockTracking(db: Db): Promise<void> {
+  let pending = stockReady.get(db)
+  if (!pending) {
+    pending = migrateStockColumn(db)
+    stockReady.set(db, pending)
+  }
+  return pending
+}
+
+async function migrateStockColumn(db: Db) {
+  try {
+    await db.run('ALTER TABLE pedidos ADD COLUMN stock_descontado INTEGER NOT NULL DEFAULT 0')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : JSON.stringify(err)
+    if (!/duplicate column/i.test(message)) throw err
+  }
+  const pendientes = await db.all<{ id: string }>(
+    "SELECT id FROM pedidos WHERE IFNULL(stock_descontado, 0) = 0 AND estado IN ('listo', 'entregado')",
+  )
+  for (const row of pendientes) {
+    const pedido = await getPedido(db, row.id)
+    if (!pedido) continue
+    await ajustarStock(db, pedido.items, -1)
+    await setStockFlag(db, pedido.id, true)
+  }
+}
+
+async function getStockFlag(db: Db, id: string): Promise<boolean> {
+  const row = await db.first<{ stock_descontado: number }>('SELECT stock_descontado FROM pedidos WHERE id = ?', [id])
+  return Boolean(row?.stock_descontado)
+}
+
+async function setStockFlag(db: Db, id: string, value: boolean) {
+  await db.run('UPDATE pedidos SET stock_descontado = ? WHERE id = ?', [value ? 1 : 0, id])
+}
+
+async function ajustarStock(db: Db, items: ItemPedido[], factor: number) {
+  const recetas = await listRecetas(db)
+  const consumo = new Map<string, number>()
+  for (const item of items) {
+    const receta = recetas.find(r => r.id === item.recetaId)
+    if (!receta) continue
+    for (const ing of receta.ingredientes) {
+      consumo.set(ing.insumoId, (consumo.get(ing.insumoId) ?? 0) + ing.cantidad * item.cantidad)
+    }
+  }
+  for (const [insumoId, qty] of consumo) {
+    if (!qty) continue
+    await db.run('UPDATE insumos SET cantidad = cantidad + ? WHERE id = ?', [factor * qty, insumoId])
+  }
+}
+
+async function syncStock(
+  db: Db,
+  id: string,
+  prevItems: ItemPedido[],
+  nextItems: ItemPedido[],
+  nextEstado: EstadoPedido,
+  wasDeducted: boolean,
+) {
+  const sigueConsumiendo = wasDeducted && consumeEstado(nextEstado)
+  const mismosItems = prevItems.length === nextItems.length
+    && [...prevItems].map(i => `${i.recetaId}:${i.cantidad}`).sort().join('|')
+      === [...nextItems].map(i => `${i.recetaId}:${i.cantidad}`).sort().join('|')
+  if (sigueConsumiendo && mismosItems) return
+
+  if (wasDeducted) await ajustarStock(db, prevItems, 1)
+  if (consumeEstado(nextEstado)) {
+    await ajustarStock(db, nextItems, -1)
+    await setStockFlag(db, id, true)
+  } else {
+    await setStockFlag(db, id, false)
+  }
+}
+
 export async function createPedido(db: Db, data: PedidoInput, id = newId()): Promise<Pedido> {
   await db.batch([
     {
@@ -310,6 +391,7 @@ export async function createPedido(db: Db, data: PedidoInput, id = newId()): Pro
     },
     ...pedidoChildStatements(id, data.items, data.decoraciones).slice(2),
   ])
+  await syncStock(db, id, [], data.items, data.estado, false)
   if (data.estado === 'entregado') {
     await incrementVentas(db, data.items)
   }
@@ -319,6 +401,7 @@ export async function createPedido(db: Db, data: PedidoInput, id = newId()): Pro
 export async function updatePedido(db: Db, id: string, data: Partial<PedidoInput>): Promise<Pedido | null> {
   const current = await getPedido(db, id)
   if (!current) return null
+  const wasDeducted = await getStockFlag(db, id)
   const next: Pedido = {
     ...current,
     ...data,
@@ -347,6 +430,7 @@ export async function updatePedido(db: Db, id: string, data: Partial<PedidoInput
     },
     ...pedidoChildStatements(id, next.items, next.decoraciones),
   ])
+  await syncStock(db, id, current.items, next.items, next.estado, wasDeducted)
   if (current.estado !== 'entregado' && next.estado === 'entregado') {
     await incrementVentas(db, next.items)
   }
@@ -360,6 +444,7 @@ export async function updateEstadoPedido(db: Db, id: string, estado: EstadoPedid
 export async function deletePedido(db: Db, id: string): Promise<boolean> {
   const current = await getPedido(db, id)
   if (!current) return false
+  if (await getStockFlag(db, id)) await ajustarStock(db, current.items, 1)
   await db.run('DELETE FROM pedidos WHERE id = ?', [id])
   return true
 }

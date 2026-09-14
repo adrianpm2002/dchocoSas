@@ -46,6 +46,7 @@ export function createApp(db: Db) {
 
   app.use('/api/*', async (_c, next) => {
     await ensureSchema(db)
+    await repo.ensureStockTracking(db)
     await next()
   })
 

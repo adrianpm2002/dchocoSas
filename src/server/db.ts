@@ -26,10 +26,17 @@ export interface D1Database {
 
 const ensured = new WeakMap<Db, Promise<void>>()
 
+function schemaStatements(): { sql: string }[] {
+  return SCHEMA.split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(sql => ({ sql }))
+}
+
 export function ensureSchema(db: Db): Promise<void> {
   let pending = ensured.get(db)
   if (!pending) {
-    pending = db.exec(SCHEMA)
+    pending = db.batch(schemaStatements())
     ensured.set(db, pending)
   }
   return pending

@@ -95,6 +95,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addPedido = async (data: Omit<Pedido, 'id'>) => {
     const created = await api.createPedido(data)
     setPedidos(p => [created, ...p])
+    setInsumos(await api.listInsumos())
     const sold = created.estado === 'entregado'
     if (sold) {
       setRecetas(p => p.map(r => {
@@ -107,12 +108,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updatePedido = async (id: string, data: Partial<Pedido>) => {
     const updated = await api.updatePedido(id, data)
     setPedidos(p => p.map(o => o.id === id ? updated : o))
+    setInsumos(await api.listInsumos())
   }
 
   const updateEstadoPedido = async (id: string, estado: Pedido['estado']) => {
     const previous = pedidos.find(o => o.id === id)
     const updated = await api.updateEstadoPedido(id, estado)
     setPedidos(p => p.map(o => o.id === id ? updated : o))
+    setInsumos(await api.listInsumos())
     if (previous && previous.estado !== 'entregado' && updated.estado === 'entregado') {
       setRecetas(p => p.map(r => {
         const qty = updated.items.filter(i => i.recetaId === r.id).reduce((s, i) => s + i.cantidad, 0)
@@ -124,6 +127,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const deletePedido = async (id: string) => {
     await api.deletePedido(id)
     setPedidos(p => p.filter(o => o.id !== id))
+    setInsumos(await api.listInsumos())
   }
 
   const calcularCostoReceta = (recetaId: string): number => {

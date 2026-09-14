@@ -107,7 +107,9 @@ export default function Insumos() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: '#f0e6d3', fontWeight: 600 }}>Insumos</h1>
-          <p style={{ fontSize: 13, color: '#7a6050', marginTop: 4 }}>Inventario de materias primas e insumos</p>
+          <p style={{ fontSize: 13, color: '#7a6050', marginTop: 4 }}>
+            Inventario de materias primas. El stock baja al marcar un pedido como listo o entregado.
+          </p>
         </div>
         <button
           onClick={openAdd}

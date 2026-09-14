@@ -48,6 +48,7 @@ export const api = {
     request<{ username: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   bootstrap: () => request<Bootstrap>('/api/bootstrap'),
+  listInsumos: () => request<Insumo[]>('/api/insumos'),
   createInsumo: (data: Omit<Insumo, 'id'>) => request<Insumo>('/api/insumos', { method: 'POST', body: JSON.stringify(data) }),
   updateInsumo: (id: string, data: Partial<Insumo>) => request<Insumo>(`/api/insumos/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteInsumo: (id: string) => request<void>(`/api/insumos/${id}`, { method: 'DELETE' }),

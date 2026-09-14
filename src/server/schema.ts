@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
   estado TEXT NOT NULL,
   fecha_creacion TEXT NOT NULL,
   fecha_entrega TEXT NOT NULL,
-  notas TEXT NOT NULL DEFAULT ''
+  notas TEXT NOT NULL DEFAULT '',
+  stock_descontado INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS pedido_items (
