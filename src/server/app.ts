@@ -229,6 +229,7 @@ function normalizePedido(body: repo.PedidoInput): repo.PedidoInput {
     items: body.items,
     decoraciones: body.decoraciones ?? [],
     descuento: Number(body.descuento) || 0,
+    envio: Number(body.envio) || 0,
     precioFinal: Number(body.precioFinal) || 0,
     estado: ESTADOS.includes(body.estado) ? body.estado : 'pendiente',
     fechaCreacion: body.fechaCreacion,

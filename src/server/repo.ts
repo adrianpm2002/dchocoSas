@@ -34,6 +34,7 @@ type PedidoRow = {
   cliente_telefono: string
   cliente_direccion: string
   descuento: number
+  envio: number
   precio_final: number
   estado: EstadoPedido
   fecha_creacion: string
@@ -98,6 +99,7 @@ function mapPedido(row: PedidoRow, items: ItemPedido[], decoraciones: Decoracion
     items,
     decoraciones,
     descuento: Number(row.descuento),
+    envio: Number(row.envio) || 0,
     precioFinal: Number(row.precio_final),
     estado: row.estado,
     fechaCreacion: row.fecha_creacion,
@@ -303,13 +305,18 @@ export function ensureStockTracking(db: Db): Promise<void> {
   return pending
 }
 
-async function migrateStockColumn(db: Db) {
+async function addColumnIfMissing(db: Db, sql: string) {
   try {
-    await db.run('ALTER TABLE pedidos ADD COLUMN stock_descontado INTEGER NOT NULL DEFAULT 0')
+    await db.run(sql)
   } catch (err) {
     const message = err instanceof Error ? err.message : JSON.stringify(err)
     if (!/duplicate column/i.test(message)) throw err
   }
+}
+
+async function migrateStockColumn(db: Db) {
+  await addColumnIfMissing(db, 'ALTER TABLE pedidos ADD COLUMN stock_descontado INTEGER NOT NULL DEFAULT 0')
+  await addColumnIfMissing(db, 'ALTER TABLE pedidos ADD COLUMN envio REAL NOT NULL DEFAULT 0')
   const pendientes = await db.all<{ id: string }>(
     "SELECT id FROM pedidos WHERE IFNULL(stock_descontado, 0) = 0 AND estado IN ('listo', 'entregado')",
   )
@@ -373,15 +380,16 @@ export async function createPedido(db: Db, data: PedidoInput, id = newId()): Pro
   await db.batch([
     {
       sql: `INSERT INTO pedidos (
-              id, cliente_nombre, cliente_telefono, cliente_direccion, descuento, precio_final,
+              id, cliente_nombre, cliente_telefono, cliente_direccion, descuento, envio, precio_final,
               estado, fecha_creacion, fecha_entrega, notas
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [
         id,
         data.cliente.nombre,
         data.cliente.telefono,
         data.cliente.direccion,
         data.descuento,
+        data.envio,
         data.precioFinal,
         data.estado,
         data.fechaCreacion,
@@ -412,7 +420,7 @@ export async function updatePedido(db: Db, id: string, data: Partial<PedidoInput
   await db.batch([
     {
       sql: `UPDATE pedidos
-            SET cliente_nombre = ?, cliente_telefono = ?, cliente_direccion = ?, descuento = ?, precio_final = ?,
+            SET cliente_nombre = ?, cliente_telefono = ?, cliente_direccion = ?, descuento = ?, envio = ?, precio_final = ?,
                 estado = ?, fecha_creacion = ?, fecha_entrega = ?, notas = ?
             WHERE id = ?`,
       params: [
@@ -420,6 +428,7 @@ export async function updatePedido(db: Db, id: string, data: Partial<PedidoInput
         next.cliente.telefono,
         next.cliente.direccion,
         next.descuento,
+        next.envio,
         next.precioFinal,
         next.estado,
         next.fechaCreacion,

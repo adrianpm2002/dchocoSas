@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   cliente_telefono TEXT NOT NULL DEFAULT '',
   cliente_direccion TEXT NOT NULL DEFAULT '',
   descuento REAL NOT NULL DEFAULT 0,
+  envio REAL NOT NULL DEFAULT 0,
   precio_final REAL NOT NULL DEFAULT 0,
   estado TEXT NOT NULL,
   fecha_creacion TEXT NOT NULL,

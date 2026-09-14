@@ -52,7 +52,7 @@ const emptyNewOrder = (): NewOrderForm => ({
 })
 
 export default function Pedidos() {
-  const { pedidos, recetas, addPedido, updateEstadoPedido, deletePedido } = useStore()
+  const { pedidos, recetas, addPedido, updateEstadoPedido, deletePedido, calcularCostoReceta } = useStore()
   const [tab, setTab] = useState<'nuevo' | 'activos' | 'historial'>('activos')
 
   // New order state
@@ -63,6 +63,8 @@ export default function Pedidos() {
   const [itemCant, setItemCant] = useState('1')
   const [decoNombre, setDecoNombre] = useState('')
   const [decoPrecio, setDecoPrecio] = useState('')
+  const [incluyeEnvio, setIncluyeEnvio] = useState(false)
+  const [envioPrecio, setEnvioPrecio] = useState('')
 
   // Detail modal
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -101,7 +103,10 @@ export default function Pedidos() {
   const subtotal = items.reduce((s, i) => s + i.cantidad * i.precioUnitario, 0)
   const decoTotal = decos.reduce((s, d) => s + d.precio, 0)
   const descuento = parseFloat(form.descuento) || 0
-  const total = subtotal + decoTotal - descuento
+  const envio = incluyeEnvio ? (parseFloat(envioPrecio) || 0) : 0
+  const total = subtotal + decoTotal + envio - descuento
+  const costoNuevo = items.reduce((s, i) => s + i.cantidad * calcularCostoReceta(i.recetaId), 0)
+  const gananciaNueva = total - costoNuevo
 
   async function submitPedido() {
     if (!form.clienteNombre.trim() || items.length === 0) return
@@ -110,6 +115,7 @@ export default function Pedidos() {
       items,
       decoraciones: decos,
       descuento,
+      envio,
       precioFinal: total,
       estado: 'pendiente',
       fechaCreacion: new Date().toISOString().split('T')[0],
@@ -119,6 +125,8 @@ export default function Pedidos() {
     setForm(emptyNewOrder())
     setItems([])
     setDecos([])
+    setIncluyeEnvio(false)
+    setEnvioPrecio('')
     setTab('activos')
   }
 
@@ -295,6 +303,39 @@ export default function Pedidos() {
               </div>
             </section>
 
+            {/* Envío */}
+            <section className="rounded-xl border border-border p-5" style={{ background: '#1c0d07' }}>
+              <h3 style={{ fontSize: 13, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
+                Envío
+              </h3>
+              <label className="flex items-center gap-3 mb-3" style={{ fontSize: 13.5, color: '#c8b49a' }}>
+                <input
+                  type="checkbox"
+                  checked={incluyeEnvio}
+                  onChange={e => {
+                    setIncluyeEnvio(e.target.checked)
+                    if (!e.target.checked) setEnvioPrecio('')
+                  }}
+                  className="accent-gold"
+                />
+                Incluye envío
+              </label>
+              {incluyeEnvio && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 11.5, color: '#7a6050', marginBottom: 5 }}>Precio del envío ($)</label>
+                  <input
+                    className={inputCls}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={envioPrecio}
+                    onChange={e => setEnvioPrecio(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+            </section>
+
             {/* Notas */}
             <section className="rounded-xl border border-border p-5" style={{ background: '#1c0d07' }}>
               <h3 style={{ fontSize: 13, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Notas</h3>
@@ -348,6 +389,12 @@ export default function Pedidos() {
                     <span style={{ fontFamily: 'var(--font-mono)', color: '#c8b49a' }}>${decoTotal.toFixed(2)}</span>
                   </div>
                 )}
+                {envio > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span style={{ color: '#7a6050' }}>Envío</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: '#c8b49a' }}>${envio.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-sm">
                   <span style={{ color: '#7a6050' }}>Descuento</span>
                   <div className="flex items-center gap-1">
@@ -361,6 +408,14 @@ export default function Pedidos() {
                   <span style={{ fontSize: 15, color: '#f0e6d3', fontWeight: 600 }}>Total</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, color: '#c4882a', fontWeight: 600 }}>${total.toFixed(2)}</span>
                 </div>
+                {items.length > 0 && (
+                  <div className="flex justify-between text-sm pt-1">
+                    <span style={{ color: '#7a6050' }}>Ganancia estimada</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: gananciaNueva >= 0 ? '#4a9a5a' : '#c44a4a' }}>
+                      {gananciaNueva >= 0 ? '+' : ''}${gananciaNueva.toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="px-5 pb-5">
                 <button
@@ -394,7 +449,7 @@ export default function Pedidos() {
           ) : (
             <div className="space-y-3">
               {activos.map(p => (
-                <PedidoCard key={p.id} p={p} recetas={recetas} onDetail={() => openDetail(p.id)}
+                <PedidoCard key={p.id} p={p} recetas={recetas} calcularCostoReceta={calcularCostoReceta} onDetail={() => openDetail(p.id)}
                   onAdvance={() => updateEstadoPedido(p.id, siguienteEstado[p.estado] as EstadoPedido)}
                   onCancel={() => updateEstadoPedido(p.id, 'cancelado')}
                   onDelete={() => deletePedido(p.id)}
@@ -413,7 +468,7 @@ export default function Pedidos() {
           ) : (
             <div className="space-y-3">
               {[...historial].reverse().map(p => (
-                <PedidoCard key={p.id} p={p} recetas={recetas} onDetail={() => openDetail(p.id)}
+                <PedidoCard key={p.id} p={p} recetas={recetas} calcularCostoReceta={calcularCostoReceta} onDetail={() => openDetail(p.id)}
                   onDelete={() => deletePedido(p.id)}
                 />
               ))}
@@ -424,7 +479,10 @@ export default function Pedidos() {
 
       {/* Detail modal */}
       <Modal open={detailModal} onClose={() => setDetailModal(false)} title="Detalle del Pedido" wide>
-        {detail && (
+        {detail && (() => {
+          const costo = detail.items.reduce((s, item) => s + item.cantidad * calcularCostoReceta(item.recetaId), 0)
+          const ganancia = detail.precioFinal - costo
+          return (
           <>
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -473,15 +531,31 @@ export default function Pedidos() {
               </>
             )}
             <div className="rounded-lg border border-border p-4" style={{ background: '#130906' }}>
+              {detail.envio > 0 && (
+                <div className="flex justify-between text-sm mb-2">
+                  <span style={{ color: '#7a6050' }}>Envío</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: '#c8b49a' }}>${detail.envio.toFixed(2)}</span>
+                </div>
+              )}
               {detail.descuento > 0 && (
                 <div className="flex justify-between text-sm mb-2">
                   <span style={{ color: '#7a6050' }}>Descuento</span>
                   <span style={{ fontFamily: 'var(--font-mono)', color: '#c44a4a' }}>−${detail.descuento.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between">
+              <div className="flex justify-between text-sm mb-2">
+                <span style={{ color: '#7a6050' }}>Costo de insumos</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#c44a4a' }}>${costo.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between mb-2">
                 <span style={{ fontSize: 15, color: '#f0e6d3', fontWeight: 600 }}>Total</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, color: '#c4882a', fontWeight: 600 }}>${detail.precioFinal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-border pt-3">
+                <span style={{ fontSize: 14, color: '#f0e6d3', fontWeight: 600 }}>Ganancia</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: ganancia >= 0 ? '#4a9a5a' : '#c44a4a', fontWeight: 600 }}>
+                  {ganancia >= 0 ? '+' : ''}${ganancia.toFixed(2)}
+                </span>
               </div>
             </div>
             {detail.notas && (
@@ -491,15 +565,17 @@ export default function Pedidos() {
               </div>
             )}
           </>
-        )}
+          )
+        })()}
       </Modal>
     </div>
   )
 }
 
-function PedidoCard({ p, recetas, onDetail, onAdvance, onCancel, onDelete }: {
+function PedidoCard({ p, recetas, calcularCostoReceta, onDetail, onAdvance, onCancel, onDelete }: {
   p: Pedido
   recetas: ReturnType<typeof useStore>['recetas']
+  calcularCostoReceta: (recetaId: string) => number
   onDetail: () => void
   onAdvance?: () => void
   onCancel?: () => void
@@ -508,6 +584,8 @@ function PedidoCard({ p, recetas, onDetail, onAdvance, onCancel, onDelete }: {
   const siguiente: Record<string, string> = {
     pendiente: 'Iniciar proceso', en_proceso: 'Marcar listo', listo: 'Marcar entregado',
   }
+  const costo = p.items.reduce((s, item) => s + item.cantidad * calcularCostoReceta(item.recetaId), 0)
+  const ganancia = p.precioFinal - costo
   return (
     <div className="rounded-xl border border-border p-5 transition-all" style={{ background: '#1c0d07' }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#4f2e18' }}
@@ -527,6 +605,9 @@ function PedidoCard({ p, recetas, onDetail, onAdvance, onCancel, onDelete }: {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: '#c4882a', fontWeight: 600 }}>
             ${p.precioFinal.toFixed(2)}
           </div>
+          <p style={{ fontSize: 12, color: ganancia >= 0 ? '#4a9a5a' : '#c44a4a', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            Ganancia {ganancia >= 0 ? '+' : ''}${ganancia.toFixed(2)}
+          </p>
           <p style={{ fontSize: 11.5, color: '#7a6050' }}>Entrega: {new Date(p.fechaEntrega).toLocaleDateString('es-AR')}</p>
         </div>
       </div>
@@ -537,6 +618,7 @@ function PedidoCard({ p, recetas, onDetail, onAdvance, onCancel, onDelete }: {
             return `${r?.nombre ?? '?'} ×${item.cantidad}`
           }).join(' · ')}
           {p.decoraciones.length > 0 && ` · ${p.decoraciones.length} extra${p.decoraciones.length > 1 ? 's' : ''}`}
+          {p.envio > 0 && ` · Envío $${p.envio.toFixed(2)}`}
         </p>
       </div>
       <div className="flex items-center gap-2">

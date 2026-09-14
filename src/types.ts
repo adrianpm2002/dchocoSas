@@ -49,6 +49,7 @@ export interface Pedido {
   items: ItemPedido[]
   decoraciones: Decoracion[]
   descuento: number
+  envio: number
   precioFinal: number
   estado: EstadoPedido
   fechaCreacion: string
