@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { addDaysISO, formatFecha, todayISO } from '../dates'
 import { useStore } from '../store'
 import type { Pedido, ItemPedido, Decoracion, EstadoPedido } from '../types'
 
@@ -47,7 +48,7 @@ type NewOrderForm = {
 
 const emptyNewOrder = (): NewOrderForm => ({
   clienteNombre: '', clienteTelefono: '', clienteDireccion: '',
-  fechaEntrega: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+  fechaEntrega: addDaysISO(2),
   notas: '', descuento: '0',
 })
 
@@ -118,7 +119,7 @@ export default function Pedidos() {
       envio,
       precioFinal: total,
       estado: 'pendiente',
-      fechaCreacion: new Date().toISOString().split('T')[0],
+      fechaCreacion: todayISO(),
       fechaEntrega: form.fechaEntrega,
       notas: form.notas.trim(),
     })
@@ -144,7 +145,7 @@ export default function Pedidos() {
   ]
 
   const siguienteEstado: Record<string, EstadoPedido> = {
-    pendiente: 'en_proceso', en_proceso: 'listo', listo: 'entregado',
+    pendiente: 'en_proceso', en_proceso: 'listo',
   }
 
   return (
@@ -152,7 +153,7 @@ export default function Pedidos() {
       {/* Header */}
       <div className="mb-6">
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: '#f0e6d3', fontWeight: 600 }}>Pedidos</h1>
-        <p style={{ fontSize: 13, color: '#7a6050', marginTop: 4 }}>Gestión de pedidos y órdenes</p>
+          <p style={{ fontSize: 13, color: '#7a6050', marginTop: 4 }}>Hasta listo para entregar. El cobro se registra en Ventas.</p>
       </div>
 
       {/* Tabs */}
@@ -450,7 +451,7 @@ export default function Pedidos() {
             <div className="space-y-3">
               {activos.map(p => (
                 <PedidoCard key={p.id} p={p} recetas={recetas} calcularCostoReceta={calcularCostoReceta} onDetail={() => openDetail(p.id)}
-                  onAdvance={() => updateEstadoPedido(p.id, siguienteEstado[p.estado] as EstadoPedido)}
+                  onAdvance={siguienteEstado[p.estado] ? () => updateEstadoPedido(p.id, siguienteEstado[p.estado]) : undefined}
                   onCancel={() => updateEstadoPedido(p.id, 'cancelado')}
                   onDelete={() => deletePedido(p.id)}
                 />
@@ -495,11 +496,11 @@ export default function Pedidos() {
             <div className="grid grid-cols-2 gap-3 mb-5">
               <div className="rounded-lg border border-border p-3" style={{ background: '#130906' }}>
                 <p style={{ fontSize: 11, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fecha creación</p>
-                <p style={{ fontSize: 13.5, color: '#c8b49a', marginTop: 3 }}>{new Date(detail.fechaCreacion).toLocaleDateString('es-AR')}</p>
+                <p style={{ fontSize: 13.5, color: '#c8b49a', marginTop: 3 }}>{formatFecha(detail.fechaCreacion)}</p>
               </div>
               <div className="rounded-lg border border-border p-3" style={{ background: '#130906' }}>
                 <p style={{ fontSize: 11, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fecha entrega</p>
-                <p style={{ fontSize: 13.5, color: '#c8b49a', marginTop: 3 }}>{new Date(detail.fechaEntrega).toLocaleDateString('es-AR')}</p>
+                <p style={{ fontSize: 13.5, color: '#c8b49a', marginTop: 3 }}>{formatFecha(detail.fechaEntrega)}</p>
               </div>
             </div>
             <p style={{ fontSize: 11, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Productos</p>
@@ -582,7 +583,7 @@ function PedidoCard({ p, recetas, calcularCostoReceta, onDetail, onAdvance, onCa
   onDelete: () => void
 }) {
   const siguiente: Record<string, string> = {
-    pendiente: 'Iniciar proceso', en_proceso: 'Marcar listo', listo: 'Marcar entregado',
+    pendiente: 'Iniciar proceso', en_proceso: 'Marcar listo',
   }
   const costo = p.items.reduce((s, item) => s + item.cantidad * calcularCostoReceta(item.recetaId), 0)
   const ganancia = p.precioFinal - costo
@@ -608,7 +609,7 @@ function PedidoCard({ p, recetas, calcularCostoReceta, onDetail, onAdvance, onCa
           <p style={{ fontSize: 12, color: ganancia >= 0 ? '#4a9a5a' : '#c44a4a', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
             Ganancia {ganancia >= 0 ? '+' : ''}${ganancia.toFixed(2)}
           </p>
-          <p style={{ fontSize: 11.5, color: '#7a6050' }}>Entrega: {new Date(p.fechaEntrega).toLocaleDateString('es-AR')}</p>
+          <p style={{ fontSize: 11.5, color: '#7a6050' }}>Entrega: {formatFecha(p.fechaEntrega)}</p>
         </div>
       </div>
       <div className="mb-4">
@@ -637,6 +638,11 @@ function PedidoCard({ p, recetas, calcularCostoReceta, onDetail, onAdvance, onCa
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(74,154,90,0.15)' }}>
             {siguiente[p.estado]}
           </button>
+        )}
+        {p.estado === 'listo' && (
+          <span className="px-3 py-1.5 rounded-md text-xs" style={{ color: '#c4882a', border: '1px solid rgba(196,136,42,0.3)' }}>
+            Cobrar en Ventas
+          </span>
         )}
         {onCancel && p.estado !== 'cancelado' && (
           <button onClick={onCancel}

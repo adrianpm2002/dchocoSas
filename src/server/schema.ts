@@ -80,4 +80,92 @@ CREATE TABLE IF NOT EXISTS sesiones (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sesiones_expira ON sesiones(expira_en);
+
+CREATE TABLE IF NOT EXISTS compras_insumos (
+  id TEXT PRIMARY KEY,
+  insumo_id TEXT,
+  insumo_nombre TEXT NOT NULL,
+  cantidad REAL NOT NULL,
+  unidad TEXT NOT NULL DEFAULT '',
+  costo_por_unidad REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  forma_pago TEXT NOT NULL,
+  fecha TEXT NOT NULL,
+  creado_en TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_compras_fecha ON compras_insumos(fecha);
+CREATE INDEX IF NOT EXISTS idx_compras_insumo ON compras_insumos(insumo_id);
+
+CREATE TABLE IF NOT EXISTS ventas (
+  id TEXT PRIMARY KEY,
+  pedido_id TEXT,
+  cliente_nombre TEXT NOT NULL,
+  origen TEXT NOT NULL,
+  total REAL NOT NULL DEFAULT 0,
+  efectivo REAL NOT NULL DEFAULT 0,
+  transferencia REAL NOT NULL DEFAULT 0,
+  fecha TEXT NOT NULL,
+  creado_en TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha);
+CREATE INDEX IF NOT EXISTS idx_ventas_pedido ON ventas(pedido_id);
+
+CREATE TABLE IF NOT EXISTS economia_capital (
+  id TEXT PRIMARY KEY,
+  efectivo REAL NOT NULL DEFAULT 0,
+  transferencia REAL NOT NULL DEFAULT 0,
+  fecha TEXT NOT NULL,
+  actualizado_en TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_caja (
+  id TEXT PRIMARY KEY,
+  tipo TEXT NOT NULL,
+  concepto TEXT NOT NULL,
+  efectivo REAL NOT NULL DEFAULT 0,
+  transferencia REAL NOT NULL DEFAULT 0,
+  fecha TEXT NOT NULL,
+  creado_en TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_movimientos_fecha ON movimientos_caja(fecha);
+
+CREATE TABLE IF NOT EXISTS cuadres (
+  id TEXT PRIMARY KEY,
+  fecha TEXT NOT NULL UNIQUE,
+  origen_apertura TEXT NOT NULL,
+  apertura_efectivo REAL NOT NULL DEFAULT 0,
+  apertura_transferencia REAL NOT NULL DEFAULT 0,
+  ingresos_efectivo REAL NOT NULL DEFAULT 0,
+  ingresos_transferencia REAL NOT NULL DEFAULT 0,
+  costo_efectivo REAL NOT NULL DEFAULT 0,
+  costo_transferencia REAL NOT NULL DEFAULT 0,
+  ganancia_efectivo REAL NOT NULL DEFAULT 0,
+  ganancia_transferencia REAL NOT NULL DEFAULT 0,
+  otros_ingresos_efectivo REAL NOT NULL DEFAULT 0,
+  otros_ingresos_transferencia REAL NOT NULL DEFAULT 0,
+  gastos_efectivo REAL NOT NULL DEFAULT 0,
+  gastos_transferencia REAL NOT NULL DEFAULT 0,
+  extracciones_efectivo REAL NOT NULL DEFAULT 0,
+  extracciones_transferencia REAL NOT NULL DEFAULT 0,
+  esperado_efectivo REAL NOT NULL DEFAULT 0,
+  esperado_transferencia REAL NOT NULL DEFAULT 0,
+  real_efectivo REAL NOT NULL DEFAULT 0,
+  real_transferencia REAL NOT NULL DEFAULT 0,
+  diferencia_efectivo REAL NOT NULL DEFAULT 0,
+  diferencia_transferencia REAL NOT NULL DEFAULT 0,
+  sin_ganancia_efectivo REAL NOT NULL DEFAULT 0,
+  sin_ganancia_transferencia REAL NOT NULL DEFAULT 0,
+  ganancia_capital_efectivo REAL NOT NULL DEFAULT 0,
+  ganancia_capital_transferencia REAL NOT NULL DEFAULT 0,
+  cierre_efectivo REAL NOT NULL DEFAULT 0,
+  cierre_transferencia REAL NOT NULL DEFAULT 0,
+  cerrado INTEGER NOT NULL DEFAULT 1,
+  creado_en TEXT NOT NULL,
+  actualizado_en TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cuadres_fecha ON cuadres(fecha);
 `

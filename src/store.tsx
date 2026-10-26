@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { api } from './api'
-import type { Insumo, Receta, Pedido } from './types'
+import type { Cuadre } from './cuadre'
+import type { CapitalInicial, CompraInsumo, FormaPago, Insumo, MovimientoCaja, Receta, Pedido, TipoMovimiento, Venta } from './types'
 
 interface StoreCtx {
   ready: boolean
@@ -9,10 +10,15 @@ interface StoreCtx {
   insumos: Insumo[]
   recetas: Receta[]
   pedidos: Pedido[]
-  addInsumo: (data: Omit<Insumo, 'id'>) => Promise<void>
+  compras: CompraInsumo[]
+  ventas: Venta[]
+  capital: CapitalInicial | null
+  movimientos: MovimientoCaja[]
+  cuadres: Cuadre[]
+  addInsumo: (data: Omit<Insumo, 'id'> & { formaPago?: FormaPago; fechaCompra?: string }) => Promise<void>
   updateInsumo: (id: string, data: Partial<Insumo>) => Promise<void>
   deleteInsumo: (id: string) => Promise<void>
-  registrarCompra: (id: string, cantidad: number, costoPorUnidad: number) => Promise<void>
+  registrarCompra: (id: string, cantidad: number, costoPorUnidad: number, formaPago: FormaPago, fecha: string) => Promise<void>
   addReceta: (data: Omit<Receta, 'id' | 'vecesVendido'>) => Promise<void>
   updateReceta: (id: string, data: Partial<Receta>) => Promise<void>
   deleteReceta: (id: string) => Promise<void>
@@ -20,6 +26,23 @@ interface StoreCtx {
   updatePedido: (id: string, data: Partial<Pedido>) => Promise<void>
   updateEstadoPedido: (id: string, estado: Pedido['estado']) => Promise<void>
   deletePedido: (id: string) => Promise<void>
+  registrarVenta: (data: {
+    fecha: string
+    efectivo: number
+    transferencia: number
+    pedidoId?: string
+    pedido?: Omit<Pedido, 'id'>
+  }) => Promise<void>
+  guardarCapital: (data: { efectivo: number; transferencia: number; fecha: string }) => Promise<void>
+  addMovimiento: (data: { tipo: TipoMovimiento; concepto: string; efectivo: number; transferencia: number; fecha: string }) => Promise<void>
+  deleteMovimiento: (id: string) => Promise<void>
+  cerrarCuadre: (data: {
+    fecha: string
+    realEfectivo: number
+    realTransferencia: number
+    gananciaCapitalEfectivo: number
+    gananciaCapitalTransferencia: number
+  }) => Promise<void>
   calcularCostoReceta: (recetaId: string) => number
 }
 
@@ -41,12 +64,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [insumos, setInsumos] = useState<Insumo[]>([])
   const [recetas, setRecetas] = useState<Receta[]>([])
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [compras, setCompras] = useState<CompraInsumo[]>([])
+  const [ventas, setVentas] = useState<Venta[]>([])
+  const [capital, setCapital] = useState<CapitalInicial | null>(null)
+  const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([])
+  const [cuadres, setCuadres] = useState<Cuadre[]>([])
 
   const refresh = useCallback(async () => {
     const data = await api.bootstrap()
     setInsumos(data.insumos)
     setRecetas(data.recetas)
     setPedidos(data.pedidos)
+    setCompras(data.compras ?? [])
+    setVentas(data.ventas ?? [])
+    setCapital(data.capital ?? null)
+    setMovimientos(data.movimientos ?? [])
+    setCuadres(data.cuadres ?? [])
     setError(null)
   }, [])
 
@@ -57,9 +90,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .finally(() => setReady(true))
   }, [refresh])
 
-  const addInsumo = async (data: Omit<Insumo, 'id'>) => {
+  const addInsumo = async (data: Omit<Insumo, 'id'> & { formaPago?: FormaPago; fechaCompra?: string }) => {
     const created = await api.createInsumo(data)
     setInsumos(p => [...p, created])
+    if (created.cantidad > 0 && data.formaPago) {
+      setCompras(await api.listCompras())
+    }
   }
 
   const updateInsumo = async (id: string, data: Partial<Insumo>) => {
@@ -72,9 +108,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setInsumos(p => p.filter(i => i.id !== id))
   }
 
-  const registrarCompra = async (id: string, cantidad: number, costo: number) => {
-    const updated = await api.registrarCompra(id, cantidad, costo)
-    setInsumos(p => p.map(i => i.id === id ? updated : i))
+  const registrarCompra = async (id: string, cantidad: number, costo: number, formaPago: FormaPago, fecha: string) => {
+    const { insumo, compra } = await api.registrarCompra(id, cantidad, costo, formaPago, fecha)
+    setInsumos(p => p.map(i => i.id === id ? insumo : i))
+    setCompras(p => [compra, ...p])
   }
 
   const addReceta = async (data: Omit<Receta, 'id' | 'vecesVendido'>) => {
@@ -127,7 +164,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const deletePedido = async (id: string) => {
     await api.deletePedido(id)
     setPedidos(p => p.filter(o => o.id !== id))
+    setVentas(p => p.map(v => v.pedidoId === id ? { ...v, pedidoId: null } : v))
     setInsumos(await api.listInsumos())
+  }
+
+  const registrarVenta = async (data: {
+    fecha: string
+    efectivo: number
+    transferencia: number
+    pedidoId?: string
+    pedido?: Omit<Pedido, 'id'>
+  }) => {
+    const { venta, pedido } = await api.registrarVenta(data)
+    setVentas(p => [venta, ...p.filter(v => v.id !== venta.id)])
+    setPedidos(p => {
+      const exists = p.some(o => o.id === pedido.id)
+      return exists ? p.map(o => o.id === pedido.id ? pedido : o) : [pedido, ...p]
+    })
+    setInsumos(await api.listInsumos())
+    if (pedido.estado === 'entregado') {
+      setRecetas(p => p.map(r => {
+        const qty = pedido.items.filter(i => i.recetaId === r.id).reduce((s, i) => s + i.cantidad, 0)
+        return qty ? { ...r, vecesVendido: r.vecesVendido + qty } : r
+      }))
+    }
+  }
+
+  const guardarCapital = async (data: { efectivo: number; transferencia: number; fecha: string }) => {
+    setCapital(await api.guardarCapital(data))
+  }
+
+  const addMovimiento = async (data: { tipo: TipoMovimiento; concepto: string; efectivo: number; transferencia: number; fecha: string }) => {
+    const created = await api.crearMovimiento(data)
+    setMovimientos(p => [created, ...p])
+  }
+
+  const deleteMovimiento = async (id: string) => {
+    await api.deleteMovimiento(id)
+    setMovimientos(p => p.filter(m => m.id !== id))
+  }
+
+  const cerrarCuadre = async (data: {
+    fecha: string
+    realEfectivo: number
+    realTransferencia: number
+    gananciaCapitalEfectivo: number
+    gananciaCapitalTransferencia: number
+  }) => {
+    const saved = await api.cerrarCuadre(data)
+    setCuadres(p => [saved, ...p.filter(c => c.fecha !== saved.fecha)])
   }
 
   const calcularCostoReceta = (recetaId: string): number => {
@@ -165,10 +250,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <Store.Provider value={{
       ready, error, refresh,
-      insumos, recetas, pedidos,
+      insumos, recetas, pedidos, compras, ventas, capital, movimientos, cuadres,
       addInsumo, updateInsumo, deleteInsumo, registrarCompra,
       addReceta, updateReceta, deleteReceta,
-      addPedido, updatePedido, updateEstadoPedido, deletePedido,
+      addPedido, updatePedido, updateEstadoPedido, deletePedido, registrarVenta,
+      guardarCapital, addMovimiento, deleteMovimiento, cerrarCuadre,
       calcularCostoReceta,
     }}>
       {children}

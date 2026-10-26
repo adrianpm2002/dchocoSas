@@ -1,3 +1,4 @@
+import { formatFecha, formatFechaLarga } from '../dates'
 import { useStore } from '../store'
 import type { View } from '../App'
 
@@ -47,7 +48,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (v: View) => voi
           {"D'ChocolAte"}
         </div>
         <p style={{ color: '#7a6050', fontSize: 14, marginTop: 4 }}>
-          {new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {formatFechaLarga()}
         </p>
       </div>
 
@@ -101,7 +102,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (v: View) => voi
                       <Badge estado={p.estado} />
                     </div>
                     <p style={{ fontSize: 12, color: '#7a6050' }}>
-                      {p.items.length} producto{p.items.length !== 1 ? 's' : ''} · Entrega: {new Date(p.fechaEntrega).toLocaleDateString('es-AR')}
+                      {p.items.length} producto{p.items.length !== 1 ? 's' : ''} · Entrega: {formatFecha(p.fechaEntrega)}
                     </p>
                   </div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: '#c4882a', fontWeight: 500 }}>
@@ -174,6 +175,9 @@ export default function Dashboard({ onNavigate }: { onNavigate: (v: View) => voi
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Nuevo pedido', view: 'pedidos' as View },
+                { label: 'Registrar venta', view: 'ventas' as View },
+                { label: 'Economía', view: 'economia' as View },
+                { label: 'Cuadre', view: 'cuadre' as View },
                 { label: 'Ver insumos', view: 'insumos' as View },
                 { label: 'Ver recetas', view: 'recetas' as View },
                 { label: 'Ver historial', view: 'historial' as View },

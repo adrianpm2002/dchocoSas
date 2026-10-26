@@ -1,7 +1,22 @@
 import { useState } from 'react'
+import {
+  addDaysToISO,
+  addMonths,
+  endOfWeekISO,
+  formatFecha,
+  inRangeISO,
+  nowHavana,
+  parseISODate,
+  startOfWeekISO,
+  todayISO,
+} from '../dates'
 import { useStore } from '../store'
 
 const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+type Periodo = 'dia' | 'semana' | 'mes'
+
+const selectCls = 'rounded-md border border-border bg-card px-3 py-1.5 text-sm text-cream outline-none focus:border-gold'
 
 function fmt(n: number) {
   return `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
@@ -10,16 +25,24 @@ function fmt(n: number) {
 export default function Historial() {
   const { pedidos, recetas, insumos, calcularCostoReceta } = useStore()
 
-  const today = new Date()
-  const [mes, setMes] = useState(today.getMonth())
-  const [año, setAño] = useState(today.getFullYear())
+  const hoy = nowHavana()
+  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [fecha, setFecha] = useState(todayISO())
+  const [mes, setMes] = useState(hoy.month - 1)
+  const [año, setAño] = useState(hoy.year)
 
   const entregados = pedidos.filter(p => p.estado === 'entregado')
-  const cancelados = pedidos.filter(p => p.estado === 'cancelado')
+
+  const semanaDesde = startOfWeekISO(fecha)
+  const semanaHasta = endOfWeekISO(fecha)
 
   const filtrados = entregados.filter(p => {
-    const d = new Date(p.fechaCreacion)
-    return d.getMonth() === mes && d.getFullYear() === año
+    const key = p.fechaCreacion.slice(0, 10)
+    const d = parseISODate(key)
+    if (!d) return false
+    if (periodo === 'dia') return key === fecha
+    if (periodo === 'semana') return inRangeISO(key, semanaDesde, semanaHasta)
+    return d.month - 1 === mes && d.year === año
   })
 
   const ingreso = filtrados.reduce((s, p) => s + p.precioFinal, 0)
@@ -56,11 +79,11 @@ export default function Historial() {
 
   // Monthly data for mini chart (last 6 months)
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1)
-    const m = d.getMonth(), y = d.getFullYear()
+    const d = addMonths(hoy.year, hoy.month, -(5 - i))
+    const m = d.month - 1, y = d.year
     const orders = entregados.filter(p => {
-      const od = new Date(p.fechaCreacion)
-      return od.getMonth() === m && od.getFullYear() === y
+      const od = parseISODate(p.fechaCreacion)
+      return od ? od.month - 1 === m && od.year === y : false
     })
     return {
       label: meses[m].slice(0, 3),
@@ -71,8 +94,8 @@ export default function Historial() {
   })
   const maxIngreso = Math.max(...monthlyData.map(m => m.ingreso), 1)
 
-  const años = Array.from(new Set(entregados.map(p => new Date(p.fechaCreacion).getFullYear()))).sort((a, b) => b - a)
-  if (!años.includes(today.getFullYear())) años.unshift(today.getFullYear())
+  const años = Array.from(new Set(entregados.map(p => parseISODate(p.fechaCreacion)?.year).filter((y): y is number => Boolean(y)))).sort((a, b) => b - a)
+  if (!años.includes(hoy.year)) años.unshift(hoy.year)
 
   return (
     <div className="p-8">
@@ -152,19 +175,60 @@ export default function Historial() {
         </div>
       </div>
 
-      {/* Monthly filter */}
-      <div className="flex items-center gap-3 mb-4">
+      {/* Period filter */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: '#f0e6d3', flex: 1 }}>
-          Pedidos de {meses[mes]} {año}
+          {periodo === 'dia' && `Pedidos del ${formatFecha(fecha)}`}
+          {periodo === 'semana' && `Pedidos del ${formatFecha(semanaDesde)} al ${formatFecha(semanaHasta)}`}
+          {periodo === 'mes' && `Pedidos de ${meses[mes]} ${año}`}
         </h2>
-        <select value={mes} onChange={e => setMes(parseInt(e.target.value))}
-          className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-cream outline-none focus:border-gold">
-          {meses.map((m, i) => <option key={i} value={i}>{m}</option>)}
-        </select>
-        <select value={año} onChange={e => setAño(parseInt(e.target.value))}
-          className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-cream outline-none focus:border-gold">
-          {años.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {([
+            { id: 'dia' as const, label: 'Día' },
+            { id: 'semana' as const, label: 'Semana' },
+            { id: 'mes' as const, label: 'Mes' },
+          ]).map(op => {
+            const active = periodo === op.id
+            return (
+              <button
+                key={op.id}
+                type="button"
+                onClick={() => setPeriodo(op.id)}
+                className="px-3 py-1.5 text-sm font-medium transition-colors"
+                style={{
+                  background: active ? 'rgba(196,136,42,0.18)' : 'transparent',
+                  color: active ? '#c4882a' : '#7a6050',
+                }}
+              >
+                {op.label}
+              </button>
+            )
+          })}
+        </div>
+        {periodo === 'dia' && (
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setFecha(addDaysToISO(fecha, -1))} className={selectCls} style={{ color: '#c8b49a' }}>‹</button>
+            <input type="date" value={fecha} onChange={e => { if (e.target.value) setFecha(e.target.value) }} className={selectCls} />
+            <button type="button" onClick={() => setFecha(addDaysToISO(fecha, 1))} className={selectCls} style={{ color: '#c8b49a' }}>›</button>
+          </div>
+        )}
+        {periodo === 'semana' && (
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setFecha(addDaysToISO(fecha, -7))} className={selectCls} style={{ color: '#c8b49a' }}>‹</button>
+            <input type="date" value={fecha} onChange={e => { if (e.target.value) setFecha(e.target.value) }} className={selectCls} />
+            <button type="button" onClick={() => setFecha(addDaysToISO(fecha, 7))} className={selectCls} style={{ color: '#c8b49a' }}>›</button>
+          </div>
+        )}
+        {periodo === 'mes' && (
+          <>
+            <select value={mes} onChange={e => setMes(parseInt(e.target.value))} className={selectCls}>
+              {meses.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <select value={año} onChange={e => setAño(parseInt(e.target.value))} className={selectCls}>
+              {años.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </>
+        )}
       </div>
 
       {/* Month stats */}
@@ -201,14 +265,14 @@ export default function Historial() {
               </tr>
             </thead>
             <tbody>
-              {[...filtrados].reverse().map((p, idx) => {
+              {[...filtrados].sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion)).map((p, idx) => {
                 const c = p.items.reduce((s, item) => s + item.cantidad * calcularCostoReceta(item.recetaId), 0)
                 const g = p.precioFinal - c
                 return (
                   <tr key={p.id} className="transition-colors hover:bg-card-hover"
                     style={{ borderBottom: idx < filtrados.length - 1 ? '1px solid #2a1508' : 'none' }}>
                     <td className="px-4 py-3" style={{ color: '#7a6050', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                      {new Date(p.fechaCreacion).toLocaleDateString('es-AR')}
+                      {formatFecha(p.fechaCreacion)}
                     </td>
                     <td className="px-4 py-3" style={{ color: '#f0e6d3' }}>{p.cliente.nombre}</td>
                     <td className="px-4 py-3" style={{ color: '#7a6050', fontSize: 12 }}>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { formatFecha, todayISO } from '../dates'
 import { useStore } from '../store'
-import type { Insumo } from '../types'
+import type { FormaPago, Insumo } from '../types'
 
 function Modal({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: React.ReactNode; title: string }) {
   if (!open) return null
@@ -33,18 +34,49 @@ function fmt(n: number) {
   return `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
 }
 
+const pagoLabel: Record<FormaPago, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+}
+
+function FormaPagoField({ value, onChange }: { value: FormaPago; onChange: (v: FormaPago) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {(['efectivo', 'transferencia'] as FormaPago[]).map(op => {
+        const active = value === op
+        return (
+          <button
+            key={op}
+            type="button"
+            onClick={() => onChange(op)}
+            className="rounded-md py-2 text-sm font-medium transition-colors border"
+            style={{
+              background: active ? 'rgba(196,136,42,0.18)' : 'transparent',
+              borderColor: active ? '#c4882a' : '#3d2210',
+              color: active ? '#c4882a' : '#7a6050',
+            }}
+          >
+            {pagoLabel[op]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 const unidades = ['g', 'kg', 'ml', 'L', 'unidad', 'rollo', 'sobre', 'taza', 'cda', 'cdta']
 
 type InsumoForm = { nombre: string; cantidad: string; unidad: string; costoPorUnidad: string; stockMinimo: string }
 const emptyForm = (): InsumoForm => ({ nombre: '', cantidad: '', unidad: 'g', costoPorUnidad: '', stockMinimo: '' })
 
 export default function Insumos() {
-  const { insumos, addInsumo, updateInsumo, deleteInsumo, registrarCompra } = useStore()
+  const { insumos, compras, addInsumo, updateInsumo, deleteInsumo, registrarCompra } = useStore()
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState<'add' | 'edit' | 'compra' | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<InsumoForm>(emptyForm())
-  const [compraForm, setCompraForm] = useState({ cantidad: '', costo: '' })
+  const [altaPago, setAltaPago] = useState<{ fecha: string; formaPago: FormaPago }>({ fecha: todayISO(), formaPago: 'efectivo' })
+  const [compraForm, setCompraForm] = useState({ cantidad: '', costo: '', fecha: todayISO(), formaPago: 'efectivo' as FormaPago })
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const filtered = insumos.filter(i => i.nombre.toLowerCase().includes(search.toLowerCase()))
@@ -53,6 +85,7 @@ export default function Insumos() {
 
   function openAdd() {
     setForm(emptyForm())
+    setAltaPago({ fecha: todayISO(), formaPago: 'efectivo' })
     setModal('add')
   }
 
@@ -70,7 +103,7 @@ export default function Insumos() {
 
   function openCompra(i: Insumo) {
     setEditId(i.id)
-    setCompraForm({ cantidad: '', costo: String(i.costoPorUnidad) })
+    setCompraForm({ cantidad: '', costo: String(i.costoPorUnidad), fecha: todayISO(), formaPago: 'efectivo' })
     setModal('compra')
   }
 
@@ -85,7 +118,12 @@ export default function Insumos() {
       costoTotal: modal === 'add' ? (parseFloat(form.cantidad) || 0) * (parseFloat(form.costoPorUnidad) || 0) : (insumos.find(i => i.id === editId)?.costoTotal ?? 0),
     }
     if (!data.nombre) return
-    if (modal === 'add') await addInsumo(data)
+    if (modal === 'add') {
+      await addInsumo({
+        ...data,
+        ...(data.cantidad > 0 ? { formaPago: altaPago.formaPago, fechaCompra: altaPago.fecha } : {}),
+      })
+    }
     else if (modal === 'edit' && editId) await updateInsumo(editId, data)
     setModal(null)
   }
@@ -95,7 +133,7 @@ export default function Insumos() {
     const cant = parseFloat(compraForm.cantidad) || 0
     const costo = parseFloat(compraForm.costo) || 0
     if (cant <= 0) return
-    await registrarCompra(editId, cant, costo)
+    await registrarCompra(editId, cant, costo, compraForm.formaPago, compraForm.fecha)
     setModal(null)
   }
 
@@ -249,6 +287,62 @@ export default function Insumos() {
         </table>
       </div>
 
+      <div className="mt-6 rounded-xl border border-border overflow-hidden" style={{ background: '#1c0d07' }}>
+        <div className="px-4 py-4 border-b border-border">
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: '#f0e6d3' }}>Historial de compras</h2>
+          <p style={{ fontSize: 12, color: '#7a6050', marginTop: 4 }}>
+            Cada compra queda registrada con fecha y forma de pago para el cuadre diario.
+          </p>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: '1px solid #3d2210' }}>
+              {['Fecha', 'Insumo', 'Cantidad', 'Total', 'Pago'].map(h => (
+                <th key={h} className="text-left px-4 py-3" style={{ fontSize: 11, color: '#7a6050', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {compras.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center" style={{ color: '#7a6050' }}>
+                  Todavía no hay compras registradas. Las compras anteriores a este cambio no se reconstruyen.
+                </td>
+              </tr>
+            ) : (
+              compras.map((compra, idx) => (
+                <tr
+                  key={compra.id}
+                  style={{ borderBottom: idx < compras.length - 1 ? '1px solid #2a1508' : 'none' }}
+                >
+                  <td className="px-4 py-3" style={{ color: '#c8b49a' }}>{formatFecha(compra.fecha)}</td>
+                  <td className="px-4 py-3" style={{ color: '#f0e6d3', fontWeight: 500 }}>{compra.insumoNombre}</td>
+                  <td className="px-4 py-3" style={{ fontFamily: 'var(--font-mono)', color: '#c8b49a' }}>
+                    {compra.cantidad.toLocaleString('es-AR')} {compra.unidad}
+                  </td>
+                  <td className="px-4 py-3" style={{ fontFamily: 'var(--font-mono)', color: '#c4882a', fontWeight: 500 }}>
+                    ${compra.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="px-2 py-0.5 rounded text-xs font-medium"
+                      style={{
+                        background: compra.formaPago === 'efectivo' ? '#4a9a5a22' : '#4a80c422',
+                        color: compra.formaPago === 'efectivo' ? '#4a9a5a' : '#4a80c4',
+                      }}
+                    >
+                      {pagoLabel[compra.formaPago]}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {/* Add / Edit modal */}
       <Modal open={modal === 'add' || modal === 'edit'} onClose={() => setModal(null)} title={modal === 'add' ? 'Nuevo Insumo' : 'Editar Insumo'}>
         <Field label="Nombre del insumo">
@@ -280,6 +374,16 @@ export default function Insumos() {
             </span>
           </div>
         )}
+        {modal === 'add' && (parseFloat(form.cantidad) || 0) > 0 && (
+          <>
+            <Field label="Fecha de compra">
+              <input className={inputCls} type="date" value={altaPago.fecha} onChange={e => setAltaPago(f => ({ ...f, fecha: e.target.value }))} />
+            </Field>
+            <Field label="Forma de pago">
+              <FormaPagoField value={altaPago.formaPago} onChange={formaPago => setAltaPago(f => ({ ...f, formaPago }))} />
+            </Field>
+          </>
+        )}
         <div className="flex gap-3 pt-2">
           <button onClick={() => setModal(null)} className="flex-1 rounded-lg py-2.5 text-sm border border-border transition-colors" style={{ color: '#7a6050' }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f0e6d3' }}
@@ -308,6 +412,12 @@ export default function Insumos() {
             </Field>
             <Field label="Costo por unidad ($)">
               <input className={inputCls} type="number" step="0.001" value={compraForm.costo} onChange={e => setCompraForm(f => ({ ...f, costo: e.target.value }))} />
+            </Field>
+            <Field label="Fecha de compra">
+              <input className={inputCls} type="date" value={compraForm.fecha} onChange={e => setCompraForm(f => ({ ...f, fecha: e.target.value }))} />
+            </Field>
+            <Field label="Forma de pago">
+              <FormaPagoField value={compraForm.formaPago} onChange={formaPago => setCompraForm(f => ({ ...f, formaPago }))} />
             </Field>
             {compraForm.cantidad && compraForm.costo && (
               <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(74,154,90,0.08)', border: '1px solid rgba(74,154,90,0.2)' }}>

@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
+import { parseISODate, todayISO } from '../dates'
 import type { EstadoPedido } from '../types'
 import * as auth from './auth-repo'
 import type { Db } from './db'
@@ -47,6 +48,10 @@ export function createApp(db: Db) {
   app.use('/api/*', async (_c, next) => {
     await ensureSchema(db)
     await repo.ensureStockTracking(db)
+    await repo.ensureComprasInsumos(db)
+    await repo.ensureVentas(db)
+    await repo.ensureEconomia(db)
+    await repo.ensureCuadres(db)
     await next()
   })
 
@@ -117,7 +122,7 @@ export function createApp(db: Db) {
   app.get('/api/insumos', async c => c.json(await repo.listInsumos(db)))
 
   app.post('/api/insumos', async c => {
-    const body = await c.req.json<repo.InsumoInput>()
+    const body = await c.req.json<repo.InsumoInput & { formaPago?: string; fechaCompra?: string }>()
     if (!body?.nombre?.trim()) throw new HTTPException(400, { message: 'El nombre es obligatorio' })
     const created = await repo.createInsumo(db, {
       nombre: body.nombre.trim(),
@@ -128,6 +133,17 @@ export function createApp(db: Db) {
       costoTotal: Number(body.costoTotal) || 0,
       stockMinimo: Number(body.stockMinimo) || 0,
     })
+    if (created.cantidad > 0 && repo.isFormaPago(body.formaPago)) {
+      await repo.insertCompra(db, {
+        insumoId: created.id,
+        insumoNombre: created.nombre,
+        cantidad: created.cantidad,
+        unidad: created.unidad,
+        costoPorUnidad: created.costoPorUnidad,
+        formaPago: body.formaPago,
+        fecha: typeof body.fechaCompra === 'string' && body.fechaCompra ? body.fechaCompra : todayISO(),
+      })
+    }
     return c.json(created, 201)
   })
 
@@ -143,13 +159,26 @@ export function createApp(db: Db) {
     return c.body(null, 204)
   })
 
+  app.get('/api/compras', async c => c.json(await repo.listCompras(db)))
+
   app.post('/api/insumos/:id/compra', async c => {
-    const body = await c.req.json<{ cantidad: number; costoPorUnidad: number }>()
+    const body = await c.req.json<{ cantidad: number; costoPorUnidad: number; formaPago?: string; fecha?: string }>()
     const cantidad = Number(body.cantidad)
     if (!(cantidad > 0)) throw new HTTPException(400, { message: 'La cantidad debe ser mayor a 0' })
-    const updated = await repo.registrarCompra(db, c.req.param('id'), cantidad, Number(body.costoPorUnidad) || 0)
-    if (!updated) throw new HTTPException(404, { message: 'Insumo no encontrado' })
-    return c.json(updated)
+    if (!repo.isFormaPago(body.formaPago)) {
+      throw new HTTPException(400, { message: 'Indicá si se pagó en efectivo o transferencia' })
+    }
+    const fecha = typeof body.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.fecha)
+      ? body.fecha
+      : todayISO()
+    const result = await repo.registrarCompra(db, c.req.param('id'), {
+      cantidad,
+      costoPorUnidad: Number(body.costoPorUnidad) || 0,
+      formaPago: body.formaPago,
+      fecha,
+    })
+    if (!result) throw new HTTPException(404, { message: 'Insumo no encontrado' })
+    return c.json(result)
   })
 
   app.get('/api/recetas', async c => c.json(await repo.listRecetas(db)))
@@ -181,12 +210,16 @@ export function createApp(db: Db) {
     const body = await c.req.json<repo.PedidoInput>()
     if (!body?.cliente?.nombre?.trim()) throw new HTTPException(400, { message: 'El cliente es obligatorio' })
     if (!body.items?.length) throw new HTTPException(400, { message: 'El pedido necesita al menos un producto' })
-    const created = await repo.createPedido(db, normalizePedido(body))
+    const created = await repo.createPedido(db, normalizePedido(body, 'pendiente'))
     return c.json(created, 201)
   })
 
   app.patch('/api/pedidos/:id', async c => {
-    const updated = await repo.updatePedido(db, c.req.param('id'), await c.req.json())
+    const body = await c.req.json<Partial<repo.PedidoInput>>()
+    if (body.estado === 'entregado') {
+      throw new HTTPException(400, { message: 'El cobro y la entrega se registran en Ventas' })
+    }
+    const updated = await repo.updatePedido(db, c.req.param('id'), body)
     if (!updated) throw new HTTPException(404, { message: 'Pedido no encontrado' })
     return c.json(updated)
   })
@@ -194,6 +227,9 @@ export function createApp(db: Db) {
   app.patch('/api/pedidos/:id/estado', async c => {
     const body = await c.req.json<{ estado: EstadoPedido }>()
     if (!ESTADOS.includes(body.estado)) throw new HTTPException(400, { message: 'Estado inválido' })
+    if (body.estado === 'entregado') {
+      throw new HTTPException(400, { message: 'El cobro y la entrega se registran en Ventas' })
+    }
     const updated = await repo.updateEstadoPedido(db, c.req.param('id'), body.estado)
     if (!updated) throw new HTTPException(404, { message: 'Pedido no encontrado' })
     return c.json(updated)
@@ -203,6 +239,96 @@ export function createApp(db: Db) {
     const ok = await repo.deletePedido(db, c.req.param('id'))
     if (!ok) throw new HTTPException(404, { message: 'Pedido no encontrado' })
     return c.body(null, 204)
+  })
+
+  app.get('/api/ventas', async c => c.json(await repo.listVentas(db)))
+
+  app.post('/api/ventas', async c => {
+    const body = await c.req.json<repo.VentaInput & { pedido?: repo.PedidoInput }>()
+    const fecha = typeof body.fecha === 'string' && parseISODate(body.fecha) ? body.fecha.slice(0, 10) : todayISO()
+    try {
+      const result = await repo.registrarVenta(db, {
+        fecha,
+        efectivo: Number(body.efectivo) || 0,
+        transferencia: Number(body.transferencia) || 0,
+        pedidoId: typeof body.pedidoId === 'string' && body.pedidoId ? body.pedidoId : undefined,
+        pedido: body.pedido?.cliente?.nombre ? normalizePedido(body.pedido, 'pendiente') : undefined,
+      })
+      return c.json(result, 201)
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : 'No se pudo registrar la venta' })
+    }
+  })
+
+  app.get('/api/economia/capital', async c => {
+    const capital = await repo.getCapital(db)
+    return c.json(capital)
+  })
+
+  app.put('/api/economia/capital', async c => {
+    const body = await c.req.json<{ efectivo?: number; transferencia?: number; fecha?: string }>()
+    const fecha = typeof body.fecha === 'string' && parseISODate(body.fecha) ? body.fecha.slice(0, 10) : todayISO()
+    try {
+      const capital = await repo.upsertCapital(db, {
+        efectivo: Number(body.efectivo) || 0,
+        transferencia: Number(body.transferencia) || 0,
+        fecha,
+      })
+      return c.json(capital)
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : 'No se pudo guardar el capital' })
+    }
+  })
+
+  app.get('/api/economia/movimientos', async c => c.json(await repo.listMovimientos(db)))
+
+  app.post('/api/economia/movimientos', async c => {
+    const body = await c.req.json<{ tipo?: string; concepto?: string; efectivo?: number; transferencia?: number; fecha?: string }>()
+    if (!repo.isTipoMovimiento(body.tipo)) throw new HTTPException(400, { message: 'Tipo de movimiento inválido' })
+    const fecha = typeof body.fecha === 'string' && parseISODate(body.fecha) ? body.fecha.slice(0, 10) : todayISO()
+    try {
+      const mov = await repo.createMovimiento(db, {
+        tipo: body.tipo,
+        concepto: typeof body.concepto === 'string' ? body.concepto : '',
+        efectivo: Number(body.efectivo) || 0,
+        transferencia: Number(body.transferencia) || 0,
+        fecha,
+      })
+      return c.json(mov, 201)
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : 'No se pudo registrar el movimiento' })
+    }
+  })
+
+  app.delete('/api/economia/movimientos/:id', async c => {
+    const ok = await repo.deleteMovimiento(db, c.req.param('id'))
+    if (!ok) throw new HTTPException(404, { message: 'Movimiento no encontrado' })
+    return c.body(null, 204)
+  })
+
+  app.get('/api/cuadres', async c => c.json(await repo.listCuadres(db)))
+
+  app.post('/api/cuadres', async c => {
+    const body = await c.req.json<{
+      fecha?: string
+      realEfectivo?: number
+      realTransferencia?: number
+      gananciaCapitalEfectivo?: number
+      gananciaCapitalTransferencia?: number
+    }>()
+    const fecha = typeof body.fecha === 'string' && parseISODate(body.fecha) ? body.fecha.slice(0, 10) : todayISO()
+    try {
+      const cuadre = await repo.cerrarCuadre(db, {
+        fecha,
+        realEfectivo: Number(body.realEfectivo) || 0,
+        realTransferencia: Number(body.realTransferencia) || 0,
+        gananciaCapitalEfectivo: Number(body.gananciaCapitalEfectivo) || 0,
+        gananciaCapitalTransferencia: Number(body.gananciaCapitalTransferencia) || 0,
+      })
+      return c.json(cuadre, 201)
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : 'No se pudo cerrar el cuadre' })
+    }
   })
 
   return app
@@ -219,7 +345,7 @@ function normalizeReceta(body: repo.RecetaInput): repo.RecetaInput {
   }
 }
 
-function normalizePedido(body: repo.PedidoInput): repo.PedidoInput {
+function normalizePedido(body: repo.PedidoInput, estado: EstadoPedido = 'pendiente'): repo.PedidoInput {
   return {
     cliente: {
       nombre: body.cliente.nombre.trim(),
@@ -231,9 +357,9 @@ function normalizePedido(body: repo.PedidoInput): repo.PedidoInput {
     descuento: Number(body.descuento) || 0,
     envio: Number(body.envio) || 0,
     precioFinal: Number(body.precioFinal) || 0,
-    estado: ESTADOS.includes(body.estado) ? body.estado : 'pendiente',
-    fechaCreacion: body.fechaCreacion,
-    fechaEntrega: body.fechaEntrega,
+    estado,
+    fechaCreacion: todayISO(),
+    fechaEntrega: parseISODate(body.fechaEntrega) ? body.fechaEntrega.slice(0, 10) : todayISO(),
     notas: body.notas?.trim() ?? '',
   }
 }
